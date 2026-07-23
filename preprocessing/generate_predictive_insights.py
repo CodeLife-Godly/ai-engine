@@ -42,7 +42,7 @@ supabase = create_client(
 )
 
 MODEL_PATH = Path(__file__).resolve().parent.parent / "models" / "trained" / "baseline_lgbm.txt"
-LOOKBACK_DAYS = 90  # enough history to warm up 50-day rolling features, with margin
+LOOKBACK_DAYS = 180  # generous margin above the 50-trading-day rolling window minimum, accounting for holidays/gaps
 TOP_N_FACTORS = 3   # show top N contributing features per insight
 
 PAGE_SIZE = 1000
@@ -101,10 +101,13 @@ def build_today_features(assets: pd.DataFrame, prices: pd.DataFrame) -> pd.DataF
     )
 
     before = len(latest)
+    dropped_rows = latest[latest[FEATURE_COLUMNS].isnull().any(axis=1)]
     latest = latest.dropna(subset=FEATURE_COLUMNS)
     dropped = before - len(latest)
     if dropped:
-        print(f"Dropped {dropped} assets with insufficient history for full features.")
+        dropped_symbols = dropped_rows["symbol"].tolist() if "symbol" in dropped_rows else dropped_rows["asset_id"].tolist()
+        print(f"Dropped {dropped} assets with insufficient history for full features:")
+        print(f"  {dropped_symbols}")
 
     return latest
 
