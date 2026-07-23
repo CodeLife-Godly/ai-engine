@@ -1,0 +1,32 @@
+name: Generate Predictive Insights
+
+on:
+  # Once daily, 21:45 UTC — after both NASDAQ and NSE have closed for
+  # the day, and after the portfolio snapshot job (21:30 UTC) so both
+  # reflect the same final daily prices.
+  schedule:
+    - cron: "45 21 * * *"
+  workflow_dispatch:
+
+jobs:
+  predict:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install pandas numpy lightgbm scikit-learn supabase python-dotenv
+
+      - name: Generate predictive insights
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python -m preprocessing.generate_predictive_insights
