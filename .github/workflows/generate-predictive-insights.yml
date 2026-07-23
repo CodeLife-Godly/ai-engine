@@ -23,7 +23,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install pandas numpy lightgbm scikit-learn supabase python-dotenv
+        run: pip install pandas numpy lightgbm scikit-learn supabase python-dotenv pyscopg
 
       - name: Generate predictive insights
         env:
