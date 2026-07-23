@@ -100,9 +100,21 @@ def build_today_features(assets: pd.DataFrame, prices: pd.DataFrame) -> pd.DataF
         .reset_index(drop=True)
     )
 
+    # Finnhub's free quote endpoint (used for NASDAQ live updates) doesn't
+    # return volume, so today's volume_change_1d / volume_vs_avg come out
+    # NaN for NASDAQ assets specifically. Rather than dropping the whole
+    # asset over two features, fall back to a neutral value (0 = "no
+    # unusual volume signal") for just those, and only require the
+    # remaining features to be present.
+    VOLUME_DERIVED_FEATURES = ["volume_change_1d", "volume_vs_avg"]
+    for col in VOLUME_DERIVED_FEATURES:
+        latest[col] = latest[col].fillna(0)
+
+    required_features = [f for f in FEATURE_COLUMNS if f not in VOLUME_DERIVED_FEATURES]
+
     before = len(latest)
-    dropped_rows = latest[latest[FEATURE_COLUMNS].isnull().any(axis=1)]
-    latest = latest.dropna(subset=FEATURE_COLUMNS)
+    dropped_rows = latest[latest[required_features].isnull().any(axis=1)]
+    latest = latest.dropna(subset=required_features)
     dropped = before - len(latest)
     if dropped:
         dropped_symbols = dropped_rows["symbol"].tolist() if "symbol" in dropped_rows else dropped_rows["asset_id"].tolist()
