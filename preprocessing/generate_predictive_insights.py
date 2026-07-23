@@ -182,8 +182,19 @@ def build_predictive_insight(row, model: lgb.Booster) -> tuple:
 
 
 def insert_insight(insight: dict, factors: list):
-    resp = supabase.table("insights").insert(insight).execute()
+    # Upsert on (asset_id, insight_type, event_date) — re-running the same
+    # day updates the existing prediction instead of creating a duplicate.
+    resp = (
+        supabase.table("insights")
+        .upsert(insight, on_conflict="asset_id,insight_type,event_date")
+        .execute()
+    )
     insight_id = resp.data[0]["id"]
+
+    # Clear old factors for this insight before inserting fresh ones,
+    # since factors don't have their own uniqueness constraint and a
+    # re-run would otherwise just pile up duplicate factor rows.
+    supabase.table("insight_factors").delete().eq("insight_id", insight_id).execute()
 
     if factors:
         for f in factors:
