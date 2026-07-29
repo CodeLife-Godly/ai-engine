@@ -182,14 +182,20 @@ def build_predictive_insight(row, model: lgb.Booster) -> tuple:
 
 
 def insert_insight(insight: dict, factors: list):
-    # Upsert on (asset_id, insight_type, event_date) — re-running the same
-    # day updates the existing prediction instead of creating a duplicate.
-    resp = (
-        supabase.table("insights")
-        .upsert(insight, on_conflict="asset_id,insight_type,event_date")
-        .execute()
-    )
-    insight_id = resp.data[0]["id"]
+    # Calls a Postgres function instead of a plain table upsert — PostgREST's
+    # on_conflict= only accepts a column list and cannot express the partial
+    # predicate (`where insight_type = 'predictive'`) that
+    # idx_insights_predictive_unique requires to be usable as a conflict
+    # target. Doing the ON CONFLICT inside plpgsql sidesteps that limitation.
+    resp = supabase.rpc("upsert_predictive_insight", {
+        "p_asset_id": insight["asset_id"],
+        "p_event_date": insight["event_date"],
+        "p_title": insight["title"],
+        "p_summary": insight["summary"],
+        "p_confidence": insight["confidence"],
+        "p_model_version": insight["model_version"],
+    }).execute()
+    insight_id = resp.data
 
     # Clear old factors for this insight before inserting fresh ones,
     # since factors don't have their own uniqueness constraint and a
@@ -225,6 +231,14 @@ def main():
             print(f"  FAILED for {row.get('symbol')}: {e}")
 
     print(f"\nDone. Success: {success}  Failed: {failed}")
+
+    # This exact failure mode — every single insert throwing (e.g. an
+    # upsert/constraint mismatch) while the job still exits 0 — is what
+    # let this pipeline silently stop writing rows for a week without
+    # GitHub Actions ever showing a red X. Fail loudly instead.
+    if success == 0 and failed > 0:
+        print("\nERROR: every insight failed to write. Failing the job so this is visible.")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
